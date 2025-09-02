@@ -1,0 +1,19 @@
+database_service:
+  failure_threshold: 5
+  recovery_timeout: 60
+  expected_exception: ["ConnectionError", "TimeoutError"]
+
+payment_api:
+  failure_threshold: 3
+  recovery_timeout: 30
+  expected_exception: ["requests.RequestException"]
+
+email_service:
+  failure_threshold: 10
+  recovery_timeout: 120
+  expected_exception: ["SMTPException"]
+
+external_api:
+  failure_threshold: 2
+  recovery_timeout: 45
+  expected_exception: ["HTTPError", "ConnectionError"]
