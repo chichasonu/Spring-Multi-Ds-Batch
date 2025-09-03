@@ -239,7 +239,7 @@ public class DataTokenizationAPI {
             System.out.println(detokenized);
             System.out.println();
             
-            if (i < testInputs.length - 1) {-----------------------
+            if (i < testInputs.length - 1) {
                 System.out.println("---");
             }
         }
@@ -252,4 +252,4 @@ public class DataTokenizationAPI {
                              " (Type: " + tokenInfo.getType() + ")");
         });
     }
-}--------------------------------------------------
+}
