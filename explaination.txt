@@ -1,0 +1,19 @@
+“Let me explain this architecture step by step.
+
+We start with the user on mobile or another channel. Their request first comes into the Client Service and Conversation Gateway, which acts as the entry point.
+
+From here, the request can optionally go through Dialogflow for basic intent capture, but the real orchestration happens in the Parent Agent.
+
+The Parent Agent is the brain of this system. It applies two key capabilities:
+
+Detour Prevention, which makes sure users only ask banking-related questions, staying within scope.
+
+Short-term memory, which allows the system to remember context across turns in a conversation.
+
+Once the Parent Agent understands the request, it routes it to the right specialized agent. These include agents for Answer Hub, Rules Engine, Cards, Transactions, Accounts, NM (next-best-message), and TPH (third-party hub). Each of these agents connects to backend systems using MCP interfaces, which makes the integrations modular and reusable.
+
+Finally, the selected agent processes the request, returns the response, and the Parent Agent delivers it back to the user through the gateway.
+
+On the top right, you can see what’s in progress — a visual workflow designer. This gives us a flow view similar to Dialogflow, but built on top of ADK. It makes the system easier to manage and update, even for non-developers, while retaining the flexibility of code-driven orchestration.
+
+So overall, this architecture combines enterprise-grade orchestration, strict domain control, reusable integrations, and an easy-to-use visual flow builder — much more powerful than what Dialogflow alone can provide.”
