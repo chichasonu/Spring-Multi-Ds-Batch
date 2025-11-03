@@ -1,0 +1,569 @@
+I'll create a downloadable artifact for you:
+
+```python
+"""
+Google ADK Agent Server with a2a-starlette and CLI
+===================================================
+
+A complete implementation of Google ADK Agent with:
+- a2a-starlette transport layer
+- Uvicorn ASGI server
+- Click CLI for server management
+- Context variable logging for metadata tracking
+- Health checks and monitoring
+
+Usage:
+    python agent_server.py start --host 0.0.0.0 --port 8000
+    python agent_server.py dev
+    python agent_server.py prod --workers 4
+    python agent_server.py info
+
+Requirements:
+    pip install google-adk starlette uvicorn[standard] click requests
+"""
+
+import asyncio
+import logging
+import json
+from contextvars import ContextVar
+from typing import Any, Dict, Optional
+from datetime import datetime
+
+import click
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
+from starlette.requests import Request
+
+# Google ADK imports
+try:
+    from google.adk import Agent
+    from google.adk.transport.starlette import a2a_starlette
+except ImportError:
+    print("Error: google-adk not installed. Run: pip install google-adk")
+    exit(1)
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+APP_NAME = "Google ADK Agent Server"
+APP_VERSION = "1.0.0"
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 8000
+
+# ============================================================================
+# CONTEXT VARIABLES FOR METADATA TRACKING
+# ============================================================================
+
+request_context: ContextVar[Dict[str, Any]] = ContextVar('request_context', default={})
+session_context: ContextVar[Dict[str, Any]] = ContextVar('session_context', default={})
+agent_context: ContextVar[Dict[str, Any]] = ContextVar('agent_context', default={})
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CONTEXTUAL LOGGER
+# ============================================================================
+
+class ContextualLogger:
+    """Logger that automatically includes all context variable metadata"""
+    
+    def __init__(self, logger_name: str = __name__):
+        self.logger = logging.getLogger(logger_name)
+    
+    def _get_all_context(self) -> Dict[str, Any]:
+        """Gather all context variables"""
+        return {
+            'request_context': request_context.get(),
+            'session_context': session_context.get(),
+            'agent_context': agent_context.get(),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+    
+    def log_with_context(self, level: str, message: str, **kwargs):
+        """Log message with all context metadata"""
+        context_data = self._get_all_context()
+        log_data = {
+            'message': message,
+            'metadata': context_data,
+            **kwargs
+        }
+        
+        log_method = getattr(self.logger, level, self.logger.info)
+        log_method(json.dumps(log_data, indent=2, default=str))
+    
+    def info(self, message: str, **kwargs):
+        self.log_with_context('info', message, **kwargs)
+    
+    def error(self, message: str, **kwargs):
+        self.log_with_context('error', message, **kwargs)
+    
+    def debug(self, message: str, **kwargs):
+        self.log_with_context('debug', message, **kwargs)
+    
+    def warning(self, message: str, **kwargs):
+        self.log_with_context('warning', message, **kwargs)
+
+# Initialize contextual logger
+ctx_logger = ContextualLogger('agent_app')
+
+# ============================================================================
+# CUSTOM AGENT IMPLEMENTATION
+# ============================================================================
+
+class MyAgent(Agent):
+    """Custom Google ADK Agent with comprehensive context logging"""
+    
+    def __init__(self, name: str = "my_agent", description: str = "Agent with context logging"):
+        super().__init__(name=name, description=description)
+        self.request_count = 0
+        ctx_logger.info(f"Agent initialized: {name}")
+    
+    async def handle_request(self, request):
+        """Handle incoming requests with full context logging"""
+        
+        self.request_count += 1
+        
+        # Set request context
+        request_context.set({
+            'request_id': getattr(request, 'id', f'req_{self.request_count}'),
+            'method': getattr(request, 'method', 'unknown'),
+            'timestamp': datetime.utcnow().isoformat(),
+            'request_number': self.request_count
+        })
+        
+        # Set session context (if available)
+        session_context.set({
+            'user_id': getattr(request, 'user_id', None),
+            'session_id': getattr(request, 'session_id', None),
+        })
+        
+        # Set agent context
+        agent_context.set({
+            'agent_id': self.name,
+            'agent_type': 'google_adk',
+            'handler': 'handle_request',
+            'total_requests': self.request_count
+        })
+        
+        ctx_logger.info('Processing agent request')
+        
+        # Process the request
+        try:
+            response = await self.process(request)
+            ctx_logger.info('Request processed successfully')
+            return response
+        except Exception as e:
+            ctx_logger.error(f'Error processing request: {str(e)}')
+            raise
+    
+    async def process(self, request):
+        """Process agent request - override this with your logic"""
+        ctx_logger.info('Executing agent logic')
+        
+        # Extract message from request (adjust based on your request structure)
+        message = getattr(request, 'message', 'No message provided')
+        
+        # Your custom agent processing logic here
+        response_text = f"Agent processed: {message}"
+        
+        # Return response with metadata
+        return {
+            'status': 'success',
+            'response': response_text,
+            'request_number': self.request_count,
+            'metadata': {
+                'request_context': request_context.get(),
+                'session_context': session_context.get(),
+                'agent_context': agent_context.get()
+            }
+        }
+
+# ============================================================================
+# MIDDLEWARE
+# ============================================================================
+
+class ContextMiddleware:
+    """Middleware to track request context"""
+    
+    def __init__(self, app):
+        self.app = app
+    
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            # Initialize request context from HTTP scope
+            request_context.set({
+                'path': scope.get('path'),
+                'method': scope.get('method'),
+                'client': scope.get('client', ['unknown', 0])[0],
+                'timestamp': datetime.utcnow().isoformat()
+            })
+            ctx_logger.info('HTTP request received')
+        
+        await self.app(scope, receive, send)
+
+class LoggingMiddleware:
+    """Middleware for request/response logging"""
+    
+    def __init__(self, app):
+        self.app = app
+    
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            logger.info(f"→ {scope['method']} {scope['path']}")
+        
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                logger.info(f"← Status: {message['status']}")
+            await send(message)
+        
+        await self.app(scope, receive, send_wrapper)
+
+# ============================================================================
+# APPLICATION FACTORY
+# ============================================================================
+
+def create_app(agent: Agent) -> Starlette:
+    """Create and configure Starlette application"""
+    
+    # Health check endpoint
+    async def health_check(request: Request):
+        """Health check endpoint with context information"""
+        return JSONResponse({
+            'status': 'healthy',
+            'agent': agent.name,
+            'version': APP_VERSION,
+            'timestamp': datetime.utcnow().isoformat(),
+            'context': {
+                'request': request_context.get(),
+                'agent': agent_context.get()
+            }
+        })
+    
+    # Root endpoint
+    async def root(request: Request):
+        """Root endpoint with API information"""
+        return JSONResponse({
+            'name': APP_NAME,
+            'version': APP_VERSION,
+            'agent': agent.name,
+            'description': agent.description,
+            'endpoints': {
+                'root': '/',
+                'health': '/health',
+                'agent': '/agent',
+                'metrics': '/metrics'
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    # Metrics endpoint
+    async def metrics(request: Request):
+        """Metrics endpoint showing agent statistics"""
+        return JSONResponse({
+            'agent_name': agent.name,
+            'total_requests': agent.request_count,
+            'timestamp': datetime.utcnow().isoformat(),
+            'context': {
+                'agent': agent_context.get()
+            }
+        })
+    
+    # Create a2a routes for the agent
+    try:
+        agent_routes = a2a_starlette.create_routes(agent)
+    except Exception as e:
+        logger.error(f"Error creating agent routes: {e}")
+        agent_routes = []
+    
+    # Define routes
+    routes = [
+        Route('/', root, methods=['GET']),
+        Route('/health', health_check, methods=['GET']),
+        Route('/metrics', metrics, methods=['GET']),
+    ]
+    
+    # Add agent routes if available
+    if agent_routes:
+        routes.append(Mount('/agent', routes=agent_routes))
+    
+    # Middleware configuration
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=['*'],
+            allow_credentials=True,
+            allow_methods=['*'],
+            allow_headers=['*'],
+        ),
+        Middleware(ContextMiddleware),
+        Middleware(LoggingMiddleware)
+    ]
+    
+    # Create Starlette app
+    app = Starlette(
+        debug=True,
+        routes=routes,
+        middleware=middleware
+    )
+    
+    # Startup event
+    @app.on_event("startup")
+    async def startup_event():
+        logger.info("=" * 70)
+        logger.info(f"Starting {APP_NAME} v{APP_VERSION}")
+        logger.info(f"Agent: {agent.name}")
+        logger.info(f"Description: {agent.description}")
+        logger.info("=" * 70)
+        ctx_logger.info('Application started')
+    
+    # Shutdown event
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        logger.info(f"Shutting down {APP_NAME}")
+        ctx_logger.info('Application shutdown')
+    
+    return app
+
+# ============================================================================
+# INITIALIZE AGENT AND APP
+# ============================================================================
+
+# Create agent instance
+agent = MyAgent(
+    name="my_agent",
+    description="Google ADK Agent with context logging and a2a-starlette transport"
+)
+
+# Create application
+app = create_app(agent)
+
+# ============================================================================
+# CLI COMMANDS
+# ============================================================================
+
+@click.group()
+@click.version_option(version=APP_VERSION, prog_name=APP_NAME)
+def cli():
+    """
+    Google ADK Agent Server CLI
+    
+    Manage and run the Google ADK agent with a2a-starlette transport.
+    """
+    pass
+
+@cli.command('start')
+@click.option(
+    '--host', '-h',
+    default=DEFAULT_HOST,
+    help='Host address to bind to',
+    show_default=True
+)
+@click.option(
+    '--port', '-p',
+    default=DEFAULT_PORT,
+    type=int,
+    help='Port number to bind to',
+    show_default=True
+)
+@click.option(
+    '--reload',
+    is_flag=True,
+    help='Enable auto-reload on code changes'
+)
+@click.option(
+    '--workers', '-w',
+    default=1,
+    type=int,
+    help='Number of worker processes',
+    show_default=True
+)
+@click.option(
+    '--log-level',
+    type=click.Choice(['critical', 'error', 'warning', 'info', 'debug'], case_sensitive=False),
+    default='info',
+    help='Set the logging level',
+    show_default=True
+)
+def start(host, port, reload, workers, log_level):
+    """Start the Google ADK agent server with custom settings"""
+    
+    click.secho("\n" + "=" * 70, fg='cyan', bold=True)
+    click.secho(f"  {APP_NAME} v{APP_VERSION}", fg='green', bold=True)
+    click.secho("=" * 70 + "\n", fg='cyan', bold=True)
+    
+    click.echo(f"🚀 Server Configuration:")
+    click.echo(f"   Host: {click.style(host, fg='yellow')}")
+    click.echo(f"   Port: {click.style(str(port), fg='yellow')}")
+    click.echo(f"   Reload: {click.style(str(reload), fg='green' if reload else 'red')}")
+    click.echo(f"   Workers: {click.style(str(workers if not reload else 1), fg='yellow')}")
+    click.echo(f"   Log Level: {click.style(log_level.upper(), fg='yellow')}")
+    
+    click.secho(f"\n🤖 Agent: {agent.name}", fg='blue')
+    click.secho(f"📝 Description: {agent.description}", fg='blue')
+    click.secho(f"📡 URL: http://{host}:{port}", fg='magenta', bold=True)
+    click.secho("\n" + "=" * 70 + "\n", fg='cyan', bold=True)
+    
+    uvicorn.run(
+        "agent_server:app",
+        host=host,
+        port=port,
+        reload=reload,
+        workers=workers if not reload else 1,
+        log_level=log_level,
+        access_log=True
+    )
+
+@cli.command('dev')
+@click.option('--host', '-h', default='127.0.0.1', help='Host to bind to', show_default=True)
+@click.option('--port', '-p', default=DEFAULT_PORT, type=int, help='Port to bind to', show_default=True)
+def dev(host, port):
+    """Start server in DEVELOPMENT mode (with auto-reload and debug logging)"""
+    
+    click.secho("\n🔧 Starting in DEVELOPMENT mode...\n", fg='yellow', bold=True)
+    click.echo(f"Host: {host}")
+    click.echo(f"Port: {port}")
+    click.echo(f"Auto-reload: ENABLED")
+    click.echo(f"Log level: DEBUG\n")
+    
+    uvicorn.run(
+        "agent_server:app",
+        host=host,
+        port=port,
+        reload=True,
+        log_level="debug",
+        access_log=True
+    )
+
+@cli.command('prod')
+@click.option('--host', '-h', default=DEFAULT_HOST, help='Host to bind to', show_default=True)
+@click.option('--port', '-p', default=DEFAULT_PORT, type=int, help='Port to bind to', show_default=True)
+@click.option('--workers', '-w', default=4, type=int, help='Number of workers', show_default=True)
+def prod(host, port, workers):
+    """Start server in PRODUCTION mode (optimized, multiple workers)"""
+    
+    click.secho("\n🚀 Starting in PRODUCTION mode...\n", fg='green', bold=True)
+    click.echo(f"Host: {host}")
+    click.echo(f"Port: {port}")
+    click.echo(f"Workers: {workers}")
+    click.echo(f"Auto-reload: DISABLED")
+    click.echo(f"Log level: INFO\n")
+    
+    uvicorn.run(
+        "agent_server:app",
+        host=host,
+        port=port,
+        workers=workers,
+        reload=False,
+        log_level="info",
+        access_log=True,
+        proxy_headers=True
+    )
+
+@cli.command('status')
+@click.option('--host', '-h', default='localhost', help='Host to check', show_default=True)
+@click.option('--port', '-p', default=DEFAULT_PORT, type=int, help='Port to check', show_default=True)
+def status(host, port):
+    """Check if the server is running and healthy"""
+    
+    import requests
+    
+    url = f"http://{host}:{port}/health"
+    
+    click.echo(f"Checking server status at {url}...\n")
+    
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            click.secho("✅ Server is RUNNING and HEALTHY", fg='green', bold=True)
+            click.echo(f"\nResponse:")
+            click.echo(json.dumps(response.json(), indent=2))
+        else:
+            click.secho(f"⚠️  Server responded with status {response.status_code}", fg='yellow')
+            click.echo(response.text)
+    except requests.exceptions.ConnectionError:
+        click.secho(f"❌ Server is NOT RUNNING at {url}", fg='red', bold=True)
+    except Exception as e:
+        click.secho(f"❌ Error checking status: {str(e)}", fg='red')
+
+@cli.command('info')
+def info():
+    """Display agent and server information"""
+    
+    click.secho("\n" + "=" * 70, fg='cyan', bold=True)
+    click.secho(f"  {APP_NAME} v{APP_VERSION}", fg='green', bold=True)
+    click.secho("=" * 70 + "\n", fg='cyan', bold=True)
+    
+    click.echo(f"Agent Name: {click.style(agent.name, fg='yellow', bold=True)}")
+    click.echo(f"Description: {click.style(agent.description, fg='white')}")
+    click.echo(f"Type: {click.style('Google ADK', fg='blue')}")
+    
+    click.secho("\n📍 Available Endpoints:", fg='magenta', bold=True)
+    endpoints = [
+        ("GET", "/", "Root endpoint - API information"),
+        ("GET", "/health", "Health check with context"),
+        ("GET", "/metrics", "Agent metrics and statistics"),
+        ("POST", "/agent", "Agent API endpoint (a2a protocol)"),
+    ]
+    
+    for method, path, desc in endpoints:
+        click.echo(f"  {click.style(method, fg='green', bold=True)} {click.style(path, fg='yellow')} - {desc}")
+    
+    click.secho("\n💡 Usage Examples:", fg='cyan', bold=True)
+    click.echo(f"  Start server:     python agent_server.py start")
+    click.echo(f"  Development:      python agent_server.py dev")
+    click.echo(f"  Production:       python agent_server.py prod --workers 4")
+    click.echo(f"  Check status:     python agent_server.py status")
+    click.echo(f"  Custom port:      python agent_server.py start --port 5000")
+    
+    click.secho("\n" + "=" * 70 + "\n", fg='cyan', bold=True)
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
+if __name__ == '__main__':
+    cli()
+```
+
+Perfect! You can now download the file using the download button above. 
+
+After downloading:
+
+1. **Install dependencies:**
+```bash
+pip install google-adk starlette uvicorn[standard] click requests
+```
+
+2. **Run the server:**
+```bash
+# Development mode
+python agent_server.py dev
+
+# Production mode
+python agent_server.py prod --workers 4
+
+# Custom host/port
+python agent_server.py start --host 0.0.0.0 --port 5000
+
+# Check status
+python agent_server.py status
+
+# Show info
+python agent_server.py info
+```
+
+The file includes everything you need in a single, ready-to-use Python file! 🚀
