@@ -1,0 +1,182 @@
+[
+  {
+    "intent": "greeting",
+    "utterances": [
+      "Hello",
+      "Hi there",
+      "Good morning",
+      "Hey",
+      "Hi, how are you?",
+      "Good afternoon",
+      "What's up?",
+      "Greetings",
+      "Hello there",
+      "Hey, how's it going?"
+    ]
+  },
+  {
+    "intent": "goodbye",
+    "utterances": [
+      "Bye",
+      "Goodbye",
+      "See you later",
+      "Talk to you later",
+      "Have a good day",
+      "See ya",
+      "Catch you later",
+      "I'm leaving now",
+      "Take care",
+      "Until next time"
+    ]
+  },
+  {
+    "intent": "check_balance",
+    "utterances": [
+      "What is my account balance?",
+      "How much money do I have?",
+      "Show me my balance",
+      "Can you check my balance?",
+      "What's the balance in my account?",
+      "I want to know my balance",
+      "Tell me my account balance",
+      "How much is in my account?",
+      "Check my account balance please",
+      "Balance inquiry"
+    ]
+  },
+  {
+    "intent": "transfer_money",
+    "utterances": [
+      "I want to transfer money",
+      "Send money to another account",
+      "Can I make a transfer?",
+      "Transfer funds to my savings",
+      "I need to send money",
+      "Move money from checking to savings",
+      "Wire transfer please",
+      "I want to send funds",
+      "Help me transfer money to someone",
+      "Can you transfer $100 to my friend?"
+    ]
+  },
+  {
+    "intent": "reset_password",
+    "utterances": [
+      "I forgot my password",
+      "Reset my password",
+      "I can't remember my password",
+      "How do I change my password?",
+      "I need a new password",
+      "Password reset please",
+      "Help me reset my password",
+      "My password isn't working",
+      "I want to change my password",
+      "Can you reset my login credentials?"
+    ]
+  },
+  {
+    "intent": "order_status",
+    "utterances": [
+      "Where is my order?",
+      "Track my order",
+      "What's the status of my order?",
+      "When will my order arrive?",
+      "I want to check my order status",
+      "Has my order been shipped?",
+      "Order tracking",
+      "Can you tell me where my package is?",
+      "Is my order on its way?",
+      "When is my delivery coming?"
+    ]
+  },
+  {
+    "intent": "cancel_order",
+    "utterances": [
+      "I want to cancel my order",
+      "Cancel my order please",
+      "How do I cancel an order?",
+      "I need to cancel my purchase",
+      "Can I cancel my order?",
+      "Please cancel my recent order",
+      "I changed my mind, cancel the order",
+      "Stop my order",
+      "I don't want my order anymore",
+      "Cancel order number 12345"
+    ]
+  },
+  {
+    "intent": "refund_request",
+    "utterances": [
+      "I want a refund",
+      "Can I get my money back?",
+      "How do I request a refund?",
+      "I need a refund for my purchase",
+      "Please refund my order",
+      "I'd like to return this and get a refund",
+      "Refund my account",
+      "I was charged incorrectly, I want a refund",
+      "Process my refund please",
+      "When will I get my refund?"
+    ]
+  },
+  {
+    "intent": "make_appointment",
+    "utterances": [
+      "I want to book an appointment",
+      "Can I schedule a meeting?",
+      "Set up an appointment for me",
+      "I need to make an appointment",
+      "Book a slot for me",
+      "Schedule an appointment please",
+      "I'd like to reserve a time",
+      "Can I get an appointment for tomorrow?",
+      "Help me schedule a visit",
+      "I want to set up a consultation"
+    ]
+  },
+  {
+    "intent": "complaint",
+    "utterances": [
+      "I want to file a complaint",
+      "I have a complaint",
+      "I'm not happy with the service",
+      "This is unacceptable",
+      "I want to report a problem",
+      "Your service is terrible",
+      "I need to speak to a manager",
+      "I'm very dissatisfied",
+      "I want to make a formal complaint",
+      "This experience has been awful"
+    ]
+  },
+  {
+    "intent": "product_inquiry",
+    "utterances": [
+      "Tell me about your products",
+      "What products do you offer?",
+      "I want to know more about a product",
+      "Do you have this item in stock?",
+      "What are the features of this product?",
+      "Can you give me product details?",
+      "Is this product available?",
+      "What's the price of this item?",
+      "Show me your product catalog",
+      "I'm interested in your products"
+    ]
+  },
+  {
+    "intent": "technical_support",
+    "utterances": [
+      "I need technical help",
+      "My device isn't working",
+      "I'm having a technical issue",
+      "Can you help me troubleshoot?",
+      "Something is broken",
+      "I need tech support",
+      "My app keeps crashing",
+      "There's a bug in the system",
+      "Help me fix this error",
+      "I'm experiencing technical difficulties"
+    ]
+  }
+]
