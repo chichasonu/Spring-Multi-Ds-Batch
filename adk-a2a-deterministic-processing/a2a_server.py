@@ -12,12 +12,11 @@ Usage:
 import os
 import sys
 
+import uvicorn
 from dotenv import load_dotenv
-from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
-from google.adk.models.lite_llm import LiteLlm
 
-from agents.workflow import document_processing_pipeline, quality_refinement_loop
+from agents.workflow import document_processing_pipeline
 
 # Load environment variables
 load_dotenv()
@@ -61,19 +60,15 @@ def main() -> None:
     print("Agent Card available at: http://localhost:8000/.well-known/agent.json")
     print("\nPress Ctrl+C to stop the server.\n")
 
-    # to_a2a() starts the server automatically when called with host/port
-    # For manual control, we can also get the app and run with uvicorn:
-    import uvicorn
+    a2a_app = create_a2a_app()
 
-    a2a_app = to_a2a(
-        agent=document_processing_pipeline,
-        host="0.0.0.0",
-        port=8000,
-    )
-
-    # If to_a2a returns an ASGI app, run it with uvicorn
+    # Run the ASGI app with uvicorn
     if a2a_app is not None:
         uvicorn.run(a2a_app, host="0.0.0.0", port=8000)
+    else:
+        # to_a2a() may auto-start the server; if it returns None,
+        # the server is already running
+        print("A2A server started via to_a2a() auto-launch.")
 
 
 if __name__ == "__main__":
